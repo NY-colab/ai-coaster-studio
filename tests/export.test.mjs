@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import sharp from 'sharp';
+import { PDFDocument } from 'pdf-lib';
+import { DEFAULT_EDIT,validateEdit,scrubEnv } from '../server/common.mjs';
+import { renderPNG,renderPDF,sheetLayout,mm } from '../server/export.mjs';
+const image=await sharp({create:{width:300,height:300,channels:3,background:'#f06040'}}).png().toBuffer();
+test('90mm circle PNG uses 1063 pixels,300dpi,transparent corners',async()=>{const png=await renderPNG(image,DEFAULT_EDIT);const meta=await sharp(png).metadata();assert.equal(meta.width,1063);assert.equal(meta.density,300);const {data,info}=await sharp(png).raw().toBuffer({resolveWithObject:true});assert.equal(data[3],0);assert.equal(data[(531*info.width+531)*4+3],255);});
+test('square preserves opaque corners and transform exposes cream fill',async()=>{const png=await renderPNG(image,{...DEFAULT_EDIT,shape:'square',x:.5,rotation:45});const {data}=await sharp(png).raw().toBuffer({resolveWithObject:true});assert.equal(data[3],255);assert.equal(data[0],255);assert.equal(data[1],250);});
+test('A4 holds six 90mm coasters; seven creates two pages',async()=>{assert.equal(sheetLayout(90).capacity,6);const pdf=await PDFDocument.load(await renderPDF([{image,edit:DEFAULT_EDIT,copies:7}]));assert.equal(pdf.getPageCount(),2);assert.ok(Math.abs(pdf.getPage(0).getWidth()-mm(210))<.001);assert.ok(Math.abs(pdf.getPage(0).getHeight()-mm(297))<.001);assert.equal(sheetLayout(120).capacity,2);});
+test('invalid edits rejected and API credentials stripped',()=>{assert.throws(()=>validateEdit({sizeMm:NaN}));assert.throws(()=>validateEdit({zoom:9}));const env=scrubEnv({OPENAI_API_KEY:'test',CODEX_API_KEY:'test',PATH:'ok'});assert.equal(env.OPENAI_API_KEY,undefined);assert.equal(env.CODEX_API_KEY,undefined);assert.equal(env.PATH,'ok');});

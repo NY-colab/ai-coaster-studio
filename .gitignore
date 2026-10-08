@@ -1,0 +1,12 @@
+node_modules/
+dist/
+data/
+runtime/
+work/
+*.log
+release/
+share/*.exe
+EVENT-LINK.txt
+.env
+.env.*
+*.zip

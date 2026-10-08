@@ -1,0 +1,31 @@
+{
+  "name": "coaster-studio",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "start": "node server/index.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "package:portable": "node scripts/package.mjs"
+  },
+  "dependencies": {
+    "@fastify/multipart": "9.3.0",
+    "@fastify/static": "10.1.5",
+    "fastify": "5.12.5",
+    "lucide-react": "0.468.0",
+    "pdf-lib": "1.17.1",
+    "qrcode": "1.5.4",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "sharp": "0.35.5"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.0",
+    "@types/react-dom": "19.2.0",
+    "@vitejs/plugin-react": "5.0.4",
+    "typescript": "5.9.3",
+    "vite": "7.3.7"
+  }
+}

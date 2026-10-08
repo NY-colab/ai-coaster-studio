@@ -1,0 +1,44 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';import path from 'node:path';import {spawn} from 'node:child_process';import {randomUUID} from 'node:crypto';import {fileURLToPath} from 'node:url';import sharp from 'sharp';
+const root=fileURLToPath(new URL('../',import.meta.url));
+test('backend isolates participants, enforces quota and rejects a queued launch across stop',async()=>{
+ const data=path.join(root,'work','test-'+randomUUID());await fs.mkdir(data,{recursive:true});
+ const child=spawn(process.execPath,['--import',new URL('./fixtures/server-hooks.mjs',import.meta.url).href,path.join(root,'server/index.mjs')],{env:{...process.env,COASTER_PORT:'0',COASTER_DATA_DIR:data},windowsHide:true,stdio:['ignore','pipe','pipe']});
+ let log='';child.stderr.on('data',c=>log+=c);
+ const url=await new Promise((resolve,reject)=>{child.stdout.on('data',c=>{const m=c.toString().match(/COASTER_URL=(\S+)/);if(m)resolve(m[1]);});child.on('exit',()=>reject(new Error(log)));setTimeout(()=>reject(new Error(log||'startup timeout')),10000).unref();});
+ try{
+ const health=await (await fetch(url+'/api/health')).json();
+ const local={'X-Coaster-Token':health.token};
+ const call=(p,headers=local,body,method=body===undefined?'GET':'POST')=>fetch(url+p,{method,headers:{...headers,...(body===undefined?{}:{'Content-Type':'application/json'})},body:body===undefined?undefined:JSON.stringify(body)});
+ let event=await (await call('/api/event/start',local,{durationMinutes:1,maxGenerations:1})).json();
+ const remote=participant=>({...local,'X-Coaster-Event':event.id,'X-Coaster-Event-Secret':event.secret,'X-Coaster-Participant':participant});
+ const a=remote(randomUUID()),b=remote(randomUUID());
+ const bytes=await sharp({create:{width:300,height:300,channels:3,background:'#baa'}}).png().toBuffer();
+ const form=new FormData();form.append('photo',new Blob([bytes],{type:'image/png'}),'test.png');
+ const photo=await (await fetch(url+'/api/photos',{method:'POST',headers:a,body:form})).json();assert.ok(photo.id);
+ assert.equal((await call('/api/photos/'+photo.id,b)).status,404);
+ assert.equal((await call('/api/jobs',b,{photoId:photo.id,style:'watercolor',requestId:randomUUID()})).status,404);
+ assert.equal((await call('/api/event/stop',a,{})).status,403);
+ const request={photoId:photo.id,style:'watercolor',requestId:randomUUID()};
+ const response=await call('/api/jobs',a,request);assert.equal(response.status,200);const {job}=await response.json();
+ assert.equal((await (await call('/api/jobs',b)).json()).jobs.length,0);
+ assert.equal((await call('/api/jobs/'+job.id,b)).status,404);
+ assert.equal((await call('/api/jobs/'+job.id+'/image',b)).status,404);
+ assert.equal((await call('/api/jobs/'+job.id+'/edit',b,{edit:{}},'PATCH')).status,404);
+ assert.equal((await call('/api/export',b,{format:'png',items:[{jobId:job.id}]})).status,404);
+ assert.equal((await (await call('/api/jobs',a,request)).json()).job.id,job.id,'same request cannot spend quota twice');
+ assert.equal((await (await call('/api/event')).json()).used,1);
+ await call('/api/event/stop',local,{});
+ assert.equal(await fs.readFile(path.join(data,'jobs',job.id,'cancel.flag'),'utf8'),'Event closed');
+ assert.equal((await call('/api/jobs',a,{...request,requestId:randomUUID()})).status,410);
+ event=await (await call('/api/event/start',local,{durationMinutes:1,maxGenerations:1})).json();
+ assert.equal((await call('/api/jobs',a)).status,410,'old event remains closed when another opens');
+ const c=remote(randomUUID()),form2=new FormData();form2.append('photo',new Blob([bytes],{type:'image/png'}),'test.png');
+ const photo2=await (await fetch(url+'/api/photos',{method:'POST',headers:c,body:form2})).json();
+ const late=call('/api/jobs',c,{photoId:photo2.id,style:'crayon',requestId:randomUUID()});
+ await new Promise(r=>setTimeout(r,35));await call('/api/event/stop',local,{});
+ assert.equal((await late).status,410);
+ assert.equal((await fs.readFile(path.join(data,'test-launches'),'utf8')).trim().split('\n').length,1,'no CLI launch after revoke');
+ await call('/api/shutdown',local,{});
+ }finally{if(child.exitCode===null)child.kill();await new Promise(r=>child.exitCode!==null?r():child.once('exit',r));assert.ok(data.startsWith(path.join(root,'work')+path.sep));await fs.rm(data,{recursive:true,force:true});}
+});

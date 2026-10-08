@@ -1,0 +1,5 @@
+export type Style = 'watercolor' | 'crayon' | 'caricature';
+export type Edit = { shape: 'circle' | 'square'; sizeMm: number; zoom: number; x: number; y: number; rotation: number };
+export const defaultEdit: Edit = { shape: 'circle', sizeMm: 90, zoom: 1, x: 0, y: 0, rotation: 0 };
+export type Job = { id: string; photoId: string; style: Style; status: 'queued' | 'running' | 'succeeded' | 'failed' | 'interrupted'; stage: string; createdAt: string; updatedAt: string; startedAt?: string; error?: string; errorCode?: string; imageUrl?: string; photoUrl: string; edit: Edit; providerThread?: string };
+export type Health = { remote?: boolean; version?: string; eventExpiresAt?: string; ready: boolean; cliVersion: string | null; auth: 'chatgpt' | 'missing' | 'api-key' | 'unknown'; message: string; busy: boolean; activeJobId: string | null; login: { status: 'idle' | 'running' | 'complete' | 'failed'; url?: string; code?: string; message?: string }; token: string; imageGeneration: 'untested' | 'verified' | 'unavailable' };
