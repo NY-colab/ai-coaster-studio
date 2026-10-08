@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $appRoot = [System.IO.Path]::GetFullPath($PSScriptRoot)
 try {
@@ -31,7 +32,9 @@ try {
   $updateRoot = Join-Path $appRoot ('work/update-' + $version + '-' + [guid]::NewGuid().ToString('N'))
   New-Item -ItemType Directory -Path $updateRoot -Force | Out-Null
   $zipPath = Join-Path $updateRoot 'package.zip'
-  Invoke-WebRequest $package.browser_download_url -OutFile $zipPath
+  Write-Host "Downloading version $version..."
+  Invoke-WebRequest $package.browser_download_url -UseBasicParsing -TimeoutSec 300 -OutFile $zipPath
+  Write-Host "Verifying and extracting package..."
   $manifest = Invoke-RestMethod $hashes.browser_download_url
   $actualHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
   if ($manifest.portableZip.name -ne $package.name -or $actualHash -ne $manifest.portableZip.sha256) { throw 'Downloaded package checksum does not match.' }
