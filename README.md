@@ -6,7 +6,7 @@
 ## 바로 시작
 
 1. [최신 Windows 실행용 ZIP](https://github.com/NY-colab/ai-coaster-studio/releases/latest/download/AI-Coaster-Studio-Windows-x64.zip)을 운영자 PC에서 내려받아 전체 압축을 풉니다.
-2. **START.vbs**를 더블클릭하고 설정에서 Codex 로그인 상태를 확인합니다.
+2. **START.vbs**를 더블클릭합니다. 첫 화면에서 해당 PC의 **Codex로 로그인하기**를 완료하고 **공방 시작하기**를 누릅니다. 이미 로그인되어 있으면 바로 시작할 수 있습니다.
 3. 사진 준비 → 화풍 선택 → 그림 만들기 → 90mm 편집 → PNG/A4 PDF 저장.
 
 Windows 10/11 x64, 인터넷 연결이 필요합니다. Node.js, Codex CLI, Cloudflared가 포함됩니다. 계정 정보와 참가자 사진은 배포 파일에 포함하지 않습니다.

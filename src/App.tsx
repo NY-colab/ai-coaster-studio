@@ -1,4 +1,5 @@
 import EventPanel from './EventPanel';
+import OperatorLogin from './OperatorLogin';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowDownToLine, ArrowLeft, Camera, Check, ChevronDown, ChevronRight, CircleHelp, FileImage, ImagePlus, LoaderCircle, Minus, Plus, Printer, RotateCcw, Settings2, Smartphone, ShieldCheck, Sparkles, Trash2, Upload, X } from 'lucide-react';
 import type { Edit, Health, Job, Style } from './types';
@@ -56,6 +57,7 @@ function download(blob: Blob, name: string) {
 
 function App() {
   const [health, setHealth] = useState<Health | null>(null);
+  const [operatorStarted, setOperatorStarted] = useState(false);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [photo, setPhoto] = useState<Photo | null>(null);
@@ -129,10 +131,18 @@ function App() {
   }, [refresh]);
 
   useEffect(() => {
-    if (!active && health?.login.status !== 'running' && !health?.remote) return;
     const timer = window.setInterval(() => { void refresh(); }, active ? 1500 : 5000);
     return () => window.clearInterval(timer);
   }, [active, health?.login.status, health?.remote, refresh]);
+
+  useEffect(() => {
+    if (health && !health.remote && (!health.ready || health.login.status === 'running')) {
+      setOperatorStarted(false);
+      cameraWanted.current = false;
+      streamRef.current?.getTracks().forEach(track => track.stop());
+      setCameraOpen(false);
+    }
+  }, [health?.ready, health?.remote, health?.login.status]);
 
   const saveEdit = useCallback((jobId: string | null, snapshot: Edit) => {
     if (!jobId) return Promise.resolve();
@@ -267,6 +277,16 @@ function App() {
     finally { setBusyAction(null); }
   }
 
+  async function checkConnection() {
+    setBusyAction('check'); setError('');
+    try {
+      if (!tokenRef.current) { await refresh(); return; }
+      const result = await api<Health>('/api/auth/check', { method: 'POST' }, tokenRef.current);
+      setHealth(result); tokenRef.current = result.token;
+    } catch (e) { setError(readableError(e)); }
+    finally { setBusyAction(null); }
+  }
+
   async function shutdown() {
     try { await flushEdit(); await api('/api/shutdown', { method: 'POST' }, tokenRef.current); document.body.innerHTML = '<main style="font:20px Malgun Gothic,sans-serif;padding:80px;text-align:center;background:#faf9f4;color:#244839"><h1>공방이 종료되었습니다.</h1><p>이 창을 닫아도 됩니다.</p></main>'; } catch(e) { setError(readableError(e)); }
   }
@@ -298,6 +318,7 @@ function App() {
   const stepIndex = steps.findIndex(step => step.key === phase);
 
   if(eventClosed) return <main className="event-ended"><span className="brand-symbol">◌</span><h1>오늘의 체험이 끝났어요.</h1><p>이 휴대폰과 운영자 PC의 연결이 종료되었습니다.<br/>새 체험은 운영자에게 받은 새 QR로 입장해 주세요.</p></main>;
+  if (!health || (!health.remote && (!operatorStarted || !health.ready || health.login.status === 'running'))) return <OperatorLogin health={health} error={error} busy={!!busyAction} onLogin={() => void login()} onRefresh={() => void checkConnection()} onContinue={() => { setError(''); setOperatorStarted(true); }}/>;
   return <div className="app-shell">
     <header className="site-header">
       <div className="header-inner">

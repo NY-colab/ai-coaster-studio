@@ -10,9 +10,14 @@ test('backend isolates participants, enforces quota and rejects a queued launch 
  const health=await (await fetch(url+'/api/health')).json();
  const local={'X-Coaster-Token':health.token};
  const call=(p,headers=local,body,method=body===undefined?'GET':'POST')=>fetch(url+p,{method,headers:{...headers,...(body===undefined?{}:{'Content-Type':'application/json'})},body:body===undefined?undefined:JSON.stringify(body)});
+ assert.ok(health.operator.name);
+ assert.equal((await call('/api/auth/check',{},{})).status,403);
+ assert.equal((await (await call('/api/auth/check',local,{})).json()).ready,true);
  let event=await (await call('/api/event/start',local,{durationMinutes:1,maxGenerations:1})).json();
  const remote=participant=>({...local,'X-Coaster-Event':event.id,'X-Coaster-Event-Secret':event.secret,'X-Coaster-Participant':participant});
  const a=remote(randomUUID()),b=remote(randomUUID());
+ assert.equal((await call('/api/auth/check',a,{})).status,403);
+ assert.equal((await (await call('/api/health',a)).json()).operator,undefined);
  const bytes=await sharp({create:{width:300,height:300,channels:3,background:'#baa'}}).png().toBuffer();
  const form=new FormData();form.append('photo',new Blob([bytes],{type:'image/png'}),'test.png');
  const photo=await (await fetch(url+'/api/photos',{method:'POST',headers:a,body:form})).json();assert.ok(photo.id);

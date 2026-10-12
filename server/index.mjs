@@ -4,6 +4,7 @@ import staticFiles from '@fastify/static';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import os from 'node:os';
 import {createEventManager} from './events.mjs';
 import {latestRelease} from './updates.mjs';
 import sharp from 'sharp';
@@ -75,16 +76,18 @@ app.addHook('onRequest',async(req,reply)=>{
 app.setErrorHandler((error,req,reply)=>reply.code(error.statusCode||500).send({error:error.statusCode?error.message:'처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',code:error.code||'INTERNAL_ERROR'}));
 await app.register(multipart,{limits:{fileSize:15*1024*1024,files:1}});
 app.get('/api/ping',async()=>({app:'coaster-studio',version:VERSION}));
-app.get('/api/health',async()=>{if(!healthCache||Date.now()-healthTime>10000||(loginState.status==='complete'&&!healthCache.ready)){healthCache=await diagnose();healthTime=Date.now();}return {...healthCache,busy:busy(),activeJobId:activeJob,login:loginState,token,imageGeneration:generation,version:VERSION};});
+async function getHealth(req,force=false){if(force||!healthCache||Date.now()-healthTime>10000||(loginState.status==='complete'&&!healthCache.ready)){healthCache=await diagnose();healthTime=Date.now();}return {...healthCache,busy:busy(),activeJobId:activeJob,login:loginState,token,imageGeneration:generation,version:VERSION,...(req.remote?{}:{operator:{name:os.hostname(),platform:process.platform,arch:process.arch}})};}
+app.get('/api/health',req=>getHealth(req));
 const localOnly=req=>{if(req.remote)throw appError('운영자 PC에서만 사용할 수 있습니다.','OPERATOR_ONLY',403);};
 const owns=(req,remote)=>!req.remote||(remote?.eventId===req.remote.eventId&&remote?.participant===req.remote.participant);
 const ownJob=(req,id)=>{const job=jobs.get(validId(id));if(!job||!owns(req,job.remote))throw appError('작품을 찾을 수 없습니다.','NOT_FOUND',404);return job;};
 const ownPhoto=async(req,id)=>{validId(id);if(req.remote&&!owns(req,await readJSON(path.join(DATA,'photos',id+'.json'))))throw appError('사진을 찾을 수 없습니다.','NOT_FOUND',404);};
 const assertRemote=req=>{if(req.remote)eventManager.assert(req.remote.eventId);};
 app.get('/api/event',async req=>{localOnly(req);return eventManager.info();});
-app.post('/api/event/start',async req=>{localOnly(req);const h=await diagnose();if(!h.ready)throw appError(h.message,'AUTH_REQUIRED',503);return eventManager.start(req.body||{});});
+app.post('/api/event/start',async req=>{localOnly(req);if(loginState.status==='running')throw appError('로그인을 완료한 뒤 체험을 시작해 주세요.','LOGIN_PENDING',409);const h=await diagnose();if(!h.ready)throw appError(h.message,'AUTH_REQUIRED',503);return eventManager.start(req.body||{});});
 app.post('/api/event/stop',async req=>{localOnly(req);await eventManager.stop();return eventManager.info();});
 app.get('/api/updates',async req=>{localOnly(req);return latestRelease();});
+app.post('/api/auth/check',async req=>{localOnly(req);return getHealth(req,true);});
 app.post('/api/auth/login',async req=>{localOnly(req);if(busy()||eventManager.info().active)throw appError('그림 생성 또는 모바일 체험 중에는 로그인 설정을 바꿀 수 없습니다.','BUSY',409);healthCache=null;return {login:await startLogin()};});
 app.post('/api/photos',async req=>{
   const part=await req.file();if(!part)throw appError('사진을 선택해 주세요.');
@@ -101,6 +104,7 @@ app.post('/api/jobs',async req=>{
   const {photoId,style,requestId}=req.body||{};validId(photoId);validId(requestId);if(!STYLES[style])throw appError('그림 스타일을 선택해 주세요.');
   await ownPhoto(req,photoId);assertRemote(req);
   const existing=[...jobs.values()].find(j=>j.requestId===requestId&&owns(req,j.remote));if(existing)return {job:publicJob(existing)};
+  if(loginState.status==='running')throw appError('로그인을 완료한 뒤 그림을 만들어 주세요.','LOGIN_PENDING',409);
   if(busy())throw appError('다른 그림을 생성 중입니다. 완료된 뒤 다시 시도해 주세요.','BUSY',409);
   // Reserve before asynchronous auth checks to prevent simultaneous submissions.
   const job={remote:req.remote||undefined,id:crypto.randomUUID(),requestId,photoId,style,status:'queued',stage:'연결을 확인하고 있습니다',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),photoUrl:'/api/photos/'+photoId,edit:{...DEFAULT_EDIT}};

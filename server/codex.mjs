@@ -40,8 +40,9 @@ export async function startWorker(job, folder, inputPath, authorize=()=>{}) {
 export let loginState = { status: 'idle' };
 export async function startLogin() {
   if (loginState.status === 'running') return loginState;
-  const cli = await findCLI();
   loginState = { status: 'running', message: '로그인 코드를 준비하고 있습니다.' };
+  let cli;
+  try { cli = await findCLI(); } catch (e) { loginState = { status: 'failed', message: e.message }; throw e; }
   const child = spawn(cli, ['--no-daemon','login','--device-auth'], { windowsHide: true, env: scrubEnv(), stdio: ['ignore','pipe','pipe'] });
   let text = '';
   const collect = chunk => {

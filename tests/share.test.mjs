@@ -29,7 +29,7 @@ test('remote gate requires a code, sanitizes health, isolates admin and checks C
     const h=await (await call('/api/health',{headers:{Cookie:cookie}})).json();
     assert.equal(h.remote,true);assert.equal(h.cliVersion,null);assert.notEqual(h.token,'LOCAL_ADMIN_SECRET');assert.equal(h.login.code,undefined);
     const headers={Cookie:cookie,Origin:'http://event.test','X-Coaster-Token':h.token};
-    for(const p of ['/api/auth/login','/api/shutdown','/api/data','/server/index.mjs','/data/share-session.json'])assert.equal((await call(p,{method:'POST',headers})).status,403,p);
+    for(const p of ['/api/auth/login','/api/auth/check','/api/shutdown','/api/data','/server/index.mjs','/data/share-session.json'])assert.equal((await call(p,{method:'POST',headers})).status,403,p);
     assert.equal((await call('/api/jobs',{method:'POST',headers:{Cookie:cookie,Origin:'http://event.test'},body:'{}'})).status,403);
     assert.equal((await call('/api/jobs',{method:'POST',headers:{...headers,Origin:'https://evil.test'},body:'{}'})).status,403);
     const upload=await call('/api/photos',{method:'POST',headers:{...headers,'Content-Type':'application/octet-stream'},body:'photo-bytes'});
