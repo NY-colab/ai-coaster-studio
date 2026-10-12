@@ -1,11 +1,12 @@
 import {useEffect,useState} from 'react';
+import {appFetch} from './connection';
 import {X,Smartphone,QrCode,Copy,Download,Power,LoaderCircle,ExternalLink} from 'lucide-react';
 type EventState={status:'closed'|'starting'|'open';active:boolean;message:string;expiresAt?:string;maxGenerations?:number;used?:number;url?:string;joinUrl?:string;code?:string;qr?:string};
 type Release={current:string;latest?:string;available:boolean;url:string;message:string};
 export default function EventPanel({token,ready,onClose}:{token:string;ready:boolean;onClose:()=>void}) {
   const [event,setEvent]=useState<EventState|null>(null),[duration,setDuration]=useState(60),[limit,setLimit]=useState(100),[pending,setPending]=useState(false),[message,setMessage]=useState(''),[release,setRelease]=useState<Release|null>(null);
   const [now,setNow]=useState(Date.now());
-  async function call<T>(url:string,body?:unknown):Promise<T>{const r=await fetch(url,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-Coaster-Token':token},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error||'요청을 처리하지 못했습니다.');return data;}
+  async function call<T>(url:string,body?:unknown):Promise<T>{const r=await appFetch(url,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-Coaster-Token':token},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw new Error(data.error||'요청을 처리하지 못했습니다.');return data;}
   useEffect(()=>{let live=true;const refresh=()=>{setNow(Date.now());void call<EventState>('/api/event').then(v=>{if(live)setEvent(v);}).catch(e=>{if(live)setMessage(e.message);});};refresh();const timer=window.setInterval(refresh,2000);return()=>{live=false;clearInterval(timer);};},[token]);
   async function action(start:boolean){setPending(true);setMessage('');try{setEvent(await call<EventState>(start?'/api/event/start':'/api/event/stop',start?{durationMinutes:duration,maxGenerations:limit}:{}));}catch(e){setMessage((e as Error).message);}finally{setPending(false);}}
   async function copy(){try{await navigator.clipboard.writeText(event?.joinUrl||'');setMessage('체험 링크를 복사했습니다. 링크를 받은 사람은 바로 입장할 수 있습니다.');}catch{setMessage('링크를 길게 누르거나 선택해서 복사해 주세요.');}}

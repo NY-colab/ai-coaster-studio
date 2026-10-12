@@ -9,6 +9,19 @@ test('backend isolates participants, enforces quota and rejects a queued launch 
  try{
  const health=await (await fetch(url+'/api/health')).json();
  const local={'X-Coaster-Token':health.token};
+ const origin='https://ny-colab.github.io';
+ assert.equal((await fetch(url+'/api/health',{headers:{Origin:origin}})).status,401);
+ const pairing=await fetch(url+'/web-operator',{method:'POST',headers:{Origin:url,'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({token:health.token}),redirect:'manual'});
+ assert.equal(pairing.status,303);
+ const code=new URLSearchParams(new URL(pairing.headers.get('location')).hash.slice(1)).get('pair');
+ const sessionResponse=await fetch(url+'/api/operator-session',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({code})});assert.equal(sessionResponse.status,200);
+ const session=await sessionResponse.json();const web={Origin:origin,Authorization:'Bearer '+session.bearer,...local};
+ assert.equal((await (await fetch(url+'/api/health',{headers:web})).json()).operator.name,health.operator.name);
+ assert.equal((await fetch(url+'/api/auth/check',{method:'POST',headers:{...web,'Content-Type':'application/json'},body:'{}'})).status,200);
+ assert.equal((await fetch(url+'/api/auth/check',{method:'POST',headers:{Origin:origin,Authorization:'Bearer '+session.bearer,'Content-Type':'application/json'},body:'{}'})).status,403);
+ assert.equal((await fetch(url+'/api/event',{headers:web})).status,200);
+ assert.equal((await fetch(url+'/api/operator-session',{method:'DELETE',headers:web})).status,200);
+ assert.equal((await fetch(url+'/api/health',{headers:web})).status,401);
  const call=(p,headers=local,body,method=body===undefined?'GET':'POST')=>fetch(url+p,{method,headers:{...headers,...(body===undefined?{}:{'Content-Type':'application/json'})},body:body===undefined?undefined:JSON.stringify(body)});
  assert.ok(health.operator.name);
  assert.equal((await call('/api/auth/check',{},{})).status,403);

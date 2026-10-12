@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DATA = path.resolve(process.env.COASTER_DATA_DIR || path.join(ROOT, 'data'));
 export const CODEX_HOME_DIR = path.resolve(process.env.CODEX_HOME || path.join(os.homedir(), '.codex'));
-export const VERSION = '1.3.0';
+export const VERSION = '1.4.0';
 export const DEFAULT_EDIT = { shape: 'circle', sizeMm: 90, zoom: 1, x: 0, y: 0, rotation: 0 };
 export const STYLES = {
   watercolor: 'A delicate hand-painted watercolor portrait, airy washes, subtle watercolor paper, warm peach and sage accents.',

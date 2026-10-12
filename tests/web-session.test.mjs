@@ -28,7 +28,7 @@ test('GitHub web sessions use scoped bearer tokens, strict CORS and immediate re
   assert.equal((await call('/api/photos','POST',{...ah,'X-Coaster-Token':h.data.token},'photo')).status,200);
   assert.equal(received.at(-1)['x-coaster-token'],'ADMIN');assert.equal(received.at(-1).authorization,undefined);
   assert.equal((await call('/api/jobs','POST',{...bh,'X-Coaster-Token':h.data.token},'{}')).status,403);
-  for(const path of ['/api/auth/login','/api/auth/check','/api/event/start','/api/shutdown','/api/data'])assert.equal((await call(path,'POST',{...ah,'X-Coaster-Token':h.data.token},'{}')).status,403);
+  for(const path of ['/api/auth/login','/api/auth/check','/api/event/start','/api/shutdown','/api/data','/api/operator-session','/web-operator'])assert.equal((await call(path,'POST',{...ah,'X-Coaster-Token':h.data.token},'{}')).status,403);
   assert.equal((await call('/api/health','GET',{Cookie:'coaster_session='+a.data.bearer})).status,401);
   gate.revoke();const ended=await call('/api/health','GET',ah);assert.equal(ended.status,410);assert.equal(ended.headers['access-control-allow-origin'],WEB_ORIGIN);
   assert.equal((await call('/api/web-session','POST',{},JSON.stringify({code:'event-secret'}))).status,410);

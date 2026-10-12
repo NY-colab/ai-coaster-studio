@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import {createEventManager} from './events.mjs';
 import {latestRelease} from './updates.mjs';
+import {installOperatorBridge} from './operator-bridge.mjs';
 import sharp from 'sharp';
 import { ROOT,DATA,VERSION,CODEX_HOME_DIR,DEFAULT_EDIT,STYLES,alive,inside,appError,validId,readJSON,writeJSON,validateEdit } from './common.mjs';
 import { diagnose,startWorker,startLogin,loginState } from './codex.mjs';
@@ -66,12 +67,13 @@ async function refreshAll(){if(refreshing)return;refreshing=true;try{for(const j
 for(const job of jobs.values())if(job.remote&&['queued','running'].includes(job.status)){await fs.writeFile(path.join(folder(job.id),'cancel.flag'),'Server restarted');job.status='failed';job.errorCode='EVENT_CLOSED';job.error='서버가 재시작되어 이전 모바일 체험이 종료되었습니다.';await save(job);}
 await refreshAll();
 const timer=setInterval(()=>refreshAll().catch(()=>{}),1500);timer.unref();
+installOperatorBridge(app,{token,backend:()=>url});
 app.addHook('onRequest',async(req,reply)=>{
   req.remote=eventManager.remote(req);
   const host=req.headers.host||'';if(!/^(127\.0\.0\.1|localhost):\d+$/.test(host))throw appError('허용되지 않은 호스트입니다.','FORBIDDEN',403);
-  const origin=req.headers.origin;if(origin&&origin!=='http://'+host)throw appError('허용되지 않은 요청입니다.','FORBIDDEN',403);
+  const origin=req.headers.origin;if(origin&&origin!=='http://'+host&&!req.operatorWeb&&!req.operatorPair)throw appError('허용되지 않은 요청입니다.','FORBIDDEN',403);
   reply.header('Cache-Control','no-store').header('X-Content-Type-Options','nosniff').header('Referrer-Policy','no-referrer');
-  if(!['GET','HEAD'].includes(req.method)&&req.headers['x-coaster-token']!==token)throw appError('앱을 새로고침한 뒤 다시 시도해 주세요.','FORBIDDEN',403);
+  if(!['GET','HEAD'].includes(req.method)&&!req.operatorPair&&req.url!=='/web-operator'&&req.headers['x-coaster-token']!==token)throw appError('앱을 새로고침한 뒤 다시 시도해 주세요.','FORBIDDEN',403);
 });
 app.setErrorHandler((error,req,reply)=>reply.code(error.statusCode||500).send({error:error.statusCode?error.message:'처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.',code:error.code||'INTERNAL_ERROR'}));
 await app.register(multipart,{limits:{fileSize:15*1024*1024,files:1}});
