@@ -9,6 +9,7 @@ import {createEventManager} from './events.mjs';
 import {latestRelease} from './updates.mjs';
 import {installOperatorBridge} from './operator-bridge.mjs';
 import {threadImage} from './image-output.mjs';
+import {generationError} from './generation-error.mjs';
 import sharp from 'sharp';
 import { ROOT,DATA,VERSION,CODEX_HOME_DIR,DEFAULT_EDIT,STYLES,alive,inside,appError,validId,readJSON,writeJSON,validateEdit } from './common.mjs';
 import { diagnose,startWorker,startLogin,loginState } from './codex.mjs';
@@ -46,11 +47,9 @@ async function refreshJob(job) {
     const imagePath = result?.status==='success' ? result.image_path || recovered : recovered;
     if(receipt.exitCode!==0||receipt.cancelled||!imagePath) {
       const log=(await fs.readFile(path.join(dir,'provider-stderr.log'),'utf8').catch(()=>''))+' '+events+' '+(result?.error||'');
-      if(result?.status==='unavailable'||/unavailable|unsupported tool/i.test(log)){generation='unavailable';throw appError('현재 Codex 계정에서 내장 이미지 생성 도구를 사용할 수 없습니다. Codex 업데이트와 계정 도구 사용 가능 여부를 확인해 주세요.','IMAGE_TOOL_UNAVAILABLE');}
-      if(/rate.limit|usage.limit|quota|limit reached/i.test(log))throw appError('Codex 사용 한도에 도달했습니다. 한도가 회복된 후 다시 시도해 주세요.','RATE_LIMIT');
-      if(/unauth|401|login|token expired/i.test(log))throw appError('로그인이 만료되었습니다. 연결 설정에서 다시 로그인해 주세요.','AUTH_EXPIRED');
-      if(/network|connect|timeout|timed.out/i.test(log))throw appError('네트워크 연결로 인해 완료를 확인하지 못했습니다. 자동 재제출하지 않았습니다.','CONNECTION_FAILED');
-      throw appError('이미지 생성이 완료되지 않았습니다. 이전 결과는 보존되어 있습니다.','GENERATION_FAILED');
+      const failure=generationError(result,log);
+      if(failure.code==='IMAGE_TOOL_UNAVAILABLE')generation='unavailable';
+      throw appError(failure.message,failure.code);
     }
     const candidate=await fs.realpath(path.normalize(imagePath));
     const cache=await fs.realpath(path.join(CODEX_HOME_DIR,'generated_images'));
