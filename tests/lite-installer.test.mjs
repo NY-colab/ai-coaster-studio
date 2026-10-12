@@ -18,13 +18,13 @@ foreach($pair in @(@(${quote(archive)},'AI-Coaster-Studio/'),@(${quote(bad)},'..
  $z=[IO.Compression.ZipFile]::Open($pair[0],[IO.Compression.ZipArchiveMode]::Create)
  try { foreach($name in @('package.json','launcher.mjs','runtime/node.exe')) {
   $e=$z.CreateEntry($pair[1]+$name); $w=New-Object IO.StreamWriter($e.Open())
-  try { $w.Write('{"version":"1.4.0"}') } finally { $w.Dispose() }
+  try { $w.Write('{"version":"1.4.1"}') } finally { $w.Dispose() }
  } } finally { $z.Dispose() }
 }`);
   assert.equal(made.status,0,made.stderr);
   const sha=file=>createHash('sha256').update(readFileSync(file)).digest('hex');
   const run=(name,file,checksum,offline=false)=>{
-    const manifest={version:'1.4.0',full:{url:'https://github.com/NY-colab/ai-coaster-studio/releases/download/v1.4.0/test.zip',sha256:checksum,bytes:readFileSync(file).length}};
+    const manifest={version:'1.4.1',full:{url:'https://github.com/NY-colab/ai-coaster-studio/releases/download/v1.4.1/test.zip',sha256:checksum,bytes:readFileSync(file).length}};
     const harness=path.join(tmp,'harness.ps1');
     writeFileSync(harness,`Import-Module Microsoft.PowerShell.Utility
 function Invoke-RestMethod { ${offline ? "throw 'Unexpected network on cached run'" : "return ('"+JSON.stringify(manifest)+"' | ConvertFrom-Json)"} }
@@ -40,4 +40,14 @@ exit $LASTEXITCODE
   const cached=run('정상 설치',archive,sha(archive),true); assert.equal(cached.status,0,cached.stdout+cached.stderr); assert.doesNotMatch(cached.stdout,/Downloading/);
   const corrupt=run('checksum',archive,'0'.repeat(64)); assert.equal(corrupt.status,1); assert.match(corrupt.stdout,/Checksum mismatch/);
   const traversal=run('traversal',bad,sha(bad)); assert.equal(traversal.status,1); assert.match(traversal.stdout,/Unsafe archive path/);
+});
+
+// Exercise the actual CMD entry point with an inherited, invalid module directory.
+test('CMD bootstrap restores Windows PowerShell modules', {skip:process.platform!=='win32'}, () => {
+  const tmp=mkdtempSync(path.resolve('work/cmd-environment-'));
+  writeFileSync(path.join(tmp,'START-LITE.cmd'),readFileSync('installer/START-LITE.cmd'));
+  writeFileSync(path.join(tmp,'START-LITE.ps1'),"$ErrorActionPreference='Stop'; (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Algorithm");
+  const result=spawnSync('cmd.exe',['/d','/c','START-LITE.cmd'],{cwd:tmp,env:{...process.env,PSModulePath:path.join(tmp,'unavailable-modules')},encoding:'utf8',windowsHide:true,timeout:20000});
+  assert.equal(result.status,0,result.stdout+result.stderr);
+  assert.match(result.stdout,/SHA256/);
 });

@@ -17,6 +17,9 @@ test('operator pairing requires local confirmation, is one-use, scoped to each P
   assert.equal(pre.statusCode,204);assert.equal(pre.headers['access-control-allow-origin'],OPERATOR_ORIGIN);assert.equal(pre.headers['access-control-allow-private-network'],'true');
   assert.equal((await call(a,'/web-operator','POST',{origin:'https://evil.test'},{token:'local-csrf'})).statusCode,403);
   assert.equal((await call(a,'/web-operator','POST',{origin:'http://127.0.0.1:4318'},{token:'wrong'})).statusCode,403);
+  const page=await call(a,'/web-operator');
+  assert.match(page.body,/<a class="start" href="\/">이 PC에서 공방 열기<\/a>/);
+  assert.doesNotMatch(page.body,/<form|<script/,'primary operator flow stays on local origin');
   const code=await pair();
   assert.equal((await call(a,'/api/operator-session','POST',{origin:'https://evil.test'},{code})).statusCode,403);
   const session=await call(a,'/api/operator-session','POST',origin,{code});assert.equal(session.statusCode,200);

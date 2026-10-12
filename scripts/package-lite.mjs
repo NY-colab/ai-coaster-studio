@@ -12,7 +12,7 @@ const starter = path.join(release, 'AI-Coaster-Studio-Lite.zip');
 const version = JSON.parse(readFileSync(path.join(root, 'package.json'))).version;
 const original = JSON.parse(readFileSync(path.join(release, 'SHA256SUMS.json')));
 const hash = file => createHash('sha256').update(readFileSync(file)).digest('hex');
-if (version !== '1.4.0' || original.version !== version || hash(full) !== original.portableZip.sha256) throw Error('Verified v1.4.0 portable archive required');
+if (version !== '1.4.1' || original.version !== version || hash(full) !== original.portableZip.sha256) throw Error('Verified v1.4.1 portable archive required');
 if (existsSync(slim) || existsSync(starter)) throw Error('Output already exists; preserve published archives and use a fresh build folder.');
 const quote = value => "'" + value.replaceAll("'", "''") + "'";
 execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `
