@@ -11,6 +11,7 @@ async function body(req, limit) {
   return Buffer.concat(chunks);
 }
 const safeEqual=(a,b)=>{const x=Buffer.from(a||''),y=Buffer.from(b||'');return x.length===y.length&&crypto.timingSafeEqual(x,y);};
+export const WEB_ORIGIN='https://ny-colab.github.io';
 const permitted=(method,pathname)=>{
   if(['GET','HEAD'].includes(method))return pathname==='/' || /^\/assets\/[\w.-]+$/.test(pathname) || ['/api/health','/api/jobs','/api/calibration.pdf'].includes(pathname) || /^\/api\/photos\/[0-9a-f-]{36}$/.test(pathname) || /^\/api\/jobs\/[0-9a-f-]{36}(\/image)?$/.test(pathname);
   if(method==='POST')return ['/api/photos','/api/jobs','/api/export'].includes(pathname);
@@ -28,16 +29,39 @@ export function createGateway({backend,code,publicOrigin='',secureCookies=true,e
     const html=(status,message)=>{res.writeHead(status,{'Content-Type':'text/html; charset=utf-8'});res.end(loginPage(message));};
     try {
       if(!origin||req.headers.host!==new URL(origin).host)return json(403,{error:'허용되지 않은 접속 주소입니다.'});
-      if(req.headers.origin&&req.headers.origin!==origin)return json(403,{error:'다른 사이트에서 보낸 요청은 허용되지 않습니다.'});
+      const web=req.headers.origin===WEB_ORIGIN;
+      if(web){res.setHeader('Access-Control-Allow-Origin',WEB_ORIGIN);res.setHeader('Vary','Origin');}
+      if(req.headers.origin&&req.headers.origin!==origin&&!web)return json(403,{error:'다른 사이트에서 보낸 요청은 허용되지 않습니다.'});
       if(revoked) return json(410,{error:'체험이 종료되었습니다.',code:'EVENT_CLOSED'});
       authorize();
       const pathname=new URL(req.url,origin).pathname;
+      if(web&&!pathname.startsWith('/api/'))return json(403,{error:'웹 공방 API만 사용할 수 있습니다.'});
+      if(req.method==='OPTIONS'&&web){
+        const method=req.headers['access-control-request-method'];
+        const requested=String(req.headers['access-control-request-headers']||'').toLowerCase().split(',').map(x=>x.trim()).filter(Boolean);
+        if(!(pathname==='/api/web-session'&&method==='POST')&&!permitted(method,pathname))return json(403,{error:'운영자 전용 기능입니다.'});
+        if(requested.some(h=>!['authorization','content-type','x-coaster-token'].includes(h)))return json(403,{error:'허용되지 않은 헤더입니다.'});
+        res.writeHead(204,{'Access-Control-Allow-Methods':'GET, HEAD, POST, PATCH','Access-Control-Allow-Headers':'Authorization, Content-Type, X-Coaster-Token','Access-Control-Max-Age':'60'});return res.end();
+      }
       if(pathname==='/entry.js'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'application/javascript'});return res.end("const c=new URLSearchParams(location.hash.slice(1)).get('join');if(c){history.replaceState(null,'','/');document.getElementById('code').value=c;document.querySelector('form').requestSubmit();}");}
       const unsafe=!['GET','HEAD'].includes(req.method);
-      if(unsafe&&req.headers.origin!==origin)return json(403,{error:'페이지를 새로고침한 뒤 다시 시도해 주세요.'});
+      if(unsafe&&req.headers.origin!==origin&&!web)return json(403,{error:'페이지를 새로고침한 뒤 다시 시도해 주세요.'});
       const now=Date.now();
       for(const [id,s] of sessions)if(s.expires<now)sessions.delete(id);
       for(const [ip,a] of attempts)if(now-a.since>60000)attempts.delete(ip);
+      if(pathname==='/api/web-session'&&req.method==='POST') {
+        if(!web)return json(403,{error:'공식 웹 공방에서 연결해 주세요.'});
+        const ip=String(req.headers['cf-connecting-ip']||req.socket.remoteAddress);
+        const attempt=attempts.get(ip)||{since:now,count:0};attempts.set(ip,attempt);globalAttempts=globalAttempts.filter(t=>now-t<60000);
+        if(attempt.count>8||globalAttempts.length>100){res.setHeader('Retry-After','60');return json(429,{error:'연결 시도가 많습니다. 1분 후 다시 시도해 주세요.'});}
+        let input;try{input=JSON.parse((await body(req,2048)).toString());}catch(e){if(e.status)throw e;return json(400,{error:'행사 링크를 확인해 주세요.'});}
+        authorize();if(revoked)return json(410,{error:'체험이 종료되었습니다.',code:'EVENT_CLOSED'});
+        if(typeof input?.code!=='string'||!safeEqual(input.code,code)){attempt.count++;globalAttempts.push(now);return json(401,{error:'행사 접속 코드가 맞지 않습니다.'});}
+        if(sessions.size>=1000)return json(503,{error:'접속 가능한 기기 수를 초과했습니다.'});
+        const sid=crypto.randomBytes(32).toString('hex'),expires=Math.min(expiresAt,now+12*3600000);
+        sessions.set(sid,{participant:crypto.randomUUID(),csrf:crypto.randomBytes(32).toString('hex'),expires,web:true});
+        return json(200,{bearer:sid,expiresAt:expires});
+      }
       if(pathname==='/enter'&&req.method==='POST') {
         const ip=String(req.headers['cf-connecting-ip']||req.socket.remoteAddress);
         const attempt=attempts.get(ip)||{since:now,count:0};attempts.set(ip,attempt);
@@ -54,8 +78,9 @@ export function createGateway({backend,code,publicOrigin='',secureCookies=true,e
         res.setHeader('Set-Cookie',`coaster_session=${sid}; Path=/; HttpOnly; SameSite=Strict; Max-Age=43200${secureCookies?'; Secure':''}`);
         res.writeHead(303,{Location:'/'});return res.end();
       }
-      const sid=String(req.headers.cookie||'').match(/(?:^|;\s*)coaster_session=([a-f0-9]{64})(?:;|$)/)?.[1];
+      const sid=web?String(req.headers.authorization||'').match(/^Bearer ([a-f0-9]{64})$/)?.[1]:String(req.headers.cookie||'').match(/(?:^|;\s*)coaster_session=([a-f0-9]{64})(?:;|$)/)?.[1];
       const session=sessions.get(sid);
+      if(web&&!session?.web)return json(401,{error:'새 행사 링크로 다시 연결해 주세요.',code:'SESSION_REQUIRED'});
       if(!session){if(pathname==='/'||pathname==='/enter')return html(200,'');return json(401,{error:'행사 접속 코드로 다시 입장해 주세요.',code:'SESSION_REQUIRED'});}
       if(unsafe&&!safeEqual(req.headers['x-coaster-token'],session.csrf))return json(403,{error:'페이지를 새로고침한 뒤 다시 시도해 주세요.'});
       if(!permitted(req.method,pathname))return json(403,{error:'이 기능은 운영자 PC에서만 사용할 수 있습니다.',code:'OPERATOR_ONLY'});

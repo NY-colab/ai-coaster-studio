@@ -10,3 +10,5 @@ EVENT-LINK.txt
 .env
 .env.*
 *.zip
+
+dist-web/

@@ -1,5 +1,7 @@
 import EventPanel from './EventPanel';
 import OperatorLogin from './OperatorLogin';
+import ProtectedImage from './ProtectedImage';
+import { appFetch, hosted } from './connection';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowDownToLine, ArrowLeft, Camera, Check, ChevronDown, ChevronRight, CircleHelp, FileImage, ImagePlus, LoaderCircle, Minus, Plus, Printer, RotateCcw, Settings2, Smartphone, ShieldCheck, Sparkles, Trash2, Upload, X } from 'lucide-react';
 import type { Edit, Health, Job, Style } from './types';
@@ -30,9 +32,9 @@ async function api<T>(path: string, options?: RequestInit, token?: string): Prom
   const headers = new Headers(options?.headers);
   if (token) headers.set('X-Coaster-Token', token);
   if (options?.body && !(options.body instanceof FormData)) headers.set('Content-Type', 'application/json');
-  const response = await fetch(path, { ...options, headers });
+  const response = await appFetch(path, { ...options, headers });
   if (response.status === 410) { window.dispatchEvent(new Event('coaster-event-closed')); throw new Error('모바일 체험이 종료되었습니다. 운영자에게 문의해 주세요.'); }
-  if (response.status === 401) { window.location.assign('/'); throw new Error('행사 접속 코드로 다시 입장해 주세요.'); }
+  if (response.status === 401) { if (!hosted) window.location.assign('/'); throw new Error('행사 접속 코드로 다시 입장해 주세요.'); }
   if (!response.ok) throw await parseError(response);
   return response.json() as Promise<T>;
 }
@@ -41,9 +43,9 @@ async function fetchBlob(path: string, options?: RequestInit, token?: string) {
   const headers = new Headers(options?.headers);
   if (token) headers.set('X-Coaster-Token', token);
   if (options?.body) headers.set('Content-Type', 'application/json');
-  const response = await fetch(path, { ...options, headers });
+  const response = await appFetch(path, { ...options, headers });
   if (response.status === 410) { window.dispatchEvent(new Event('coaster-event-closed')); throw new Error('모바일 체험이 종료되었습니다. 운영자에게 문의해 주세요.'); }
-  if (response.status === 401) { window.location.assign('/'); throw new Error('행사 접속 코드로 다시 입장해 주세요.'); }
+  if (response.status === 401) { if (!hosted) window.location.assign('/'); throw new Error('행사 접속 코드로 다시 입장해 주세요.'); }
   if (!response.ok) throw await parseError(response);
   return response.blob();
 }
@@ -318,6 +320,7 @@ function App() {
   const stepIndex = steps.findIndex(step => step.key === phase);
 
   if(eventClosed) return <main className="event-ended"><span className="brand-symbol">◌</span><h1>오늘의 체험이 끝났어요.</h1><p>이 휴대폰과 운영자 PC의 연결이 종료되었습니다.<br/>새 체험은 운영자에게 받은 새 QR로 입장해 주세요.</p></main>;
+  if (!health && hosted) return <main className="event-ended"><LoaderCircle className="spin" size={28}/><h1>공방에 연결하고 있어요</h1><p>{error || "운영자 PC의 체험 상태를 확인하고 있습니다."}</p></main>;
   if (!health || (!health.remote && (!operatorStarted || !health.ready || health.login.status === 'running'))) return <OperatorLogin health={health} error={error} busy={!!busyAction} onLogin={() => void login()} onRefresh={() => void checkConnection()} onContinue={() => { setError(''); setOperatorStarted(true); }}/>;
   return <div className="app-shell">
     <header className="site-header">
@@ -346,7 +349,7 @@ function App() {
 
       {phase === 'style' && <section className="page-wrap style-page">
         <button className="text-back" onClick={() => setPhase('photo')}><ArrowLeft size={18}/> 사진 다시 고르기</button>
-        <div className="section-heading"><div><span className="eyebrow"><span className="eyebrow-dot"/> 두 번째, 나만의 느낌</span><h1>어떤 그림으로<br /><em>남겨 볼까요?</em></h1><p>마음에 드는 화풍을 골라 주세요. AI가 사진을 보고 그림을 그려 줍니다.</p></div><div className="selected-photo"><img src={photo?.url} alt="선택한 사진"/><span>선택한 사진</span></div></div>
+        <div className="section-heading"><div><span className="eyebrow"><span className="eyebrow-dot"/> 두 번째, 나만의 느낌</span><h1>어떤 그림으로<br /><em>남겨 볼까요?</em></h1><p>마음에 드는 화풍을 골라 주세요. AI가 사진을 보고 그림을 그려 줍니다.</p></div><div className="selected-photo"><ProtectedImage src={photo?.url} alt="선택한 사진"/><span>선택한 사진</span></div></div>
         <div className="style-grid">{styleChoices.map(choice => <button key={choice.id} className={`style-card ${choice.className} ${style === choice.id ? 'selected' : ''}`} onClick={() => { setStyle(choice.id); setRequestId(null); }} aria-pressed={style === choice.id}><span className="style-art"><span className="style-art-circle">{choice.mark}</span></span><span className="style-text"><strong>{choice.title}</strong><small>{choice.desc}</small></span><span className="style-check">{style === choice.id ? <Check size={15}/> : null}</span></button>)}</div>
         <div className="style-footer"><p><ShieldCheck size={17}/> 생성하면 사진이 Codex로 전송되어 AI 그림 제작에 사용됩니다.</p><button className="primary-btn" onClick={() => void generate()} disabled={!canGenerate}>{busyAction === 'generate' ? <><LoaderCircle className="spin" size={19}/> 시작하는 중…</> : <>그림 만들기 <Sparkles size={19}/></>}</button></div>
         {!health?.ready && <p className="setup-hint">공방 연결이 필요합니다. 오른쪽 위 <button onClick={() => setSettingsOpen(true)}>설정</button>에서 상태를 확인해 주세요.</p>}
@@ -358,7 +361,7 @@ function App() {
         <div className="studio-layout">
           <div className="canvas-panel"><div className="panel-title"><span>미리보기</span><span className="soft-label">{edit.shape === 'circle' ? '원형' : '사각형'} · {edit.sizeMm} mm</span></div>
             <div className="preview-stage">
-              {current?.status === 'succeeded' && current.imageUrl ? <div className={`coaster-preview ${edit.shape}`} ref={viewportRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} role="img" aria-label="완성한 그림. 마우스나 손가락으로 드래그해 위치를 바꿀 수 있습니다."><img src={current.imageUrl} alt="" draggable={false} style={{ transform: `translate(${edit.x * 100}%, ${edit.y * 100}%) rotate(${edit.rotation}deg) scale(${edit.zoom})` }}/>{safeZone && <span className="safe-ring" style={{ inset: `${500 / edit.sizeMm}%` }} aria-hidden="true"/>}</div> : <div className="waiting-preview">{current?.status === 'failed' || current?.status === 'interrupted' ? <><CircleHelp size={37}/><strong>그림을 완성하지 못했어요</strong><p>{current.error || '다시 시도해 주세요.'}</p><button className="outline-btn" onClick={() => { setPhase('style'); setRequestId(null); }}>다시 만들기</button></> : <><span className="waiting-disc"><Sparkles size={45}/></span><strong>{currentStatus || '그림을 불러오는 중이에요'}</strong><p>조금만 기다려 주세요. 완성되면 여기서 만날 수 있어요.</p><LoaderCircle className="spin" size={21}/></>}</div>}
+              {current?.status === 'succeeded' && current.imageUrl ? <div className={`coaster-preview ${edit.shape}`} ref={viewportRef} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp} role="img" aria-label="완성한 그림. 마우스나 손가락으로 드래그해 위치를 바꿀 수 있습니다."><ProtectedImage src={current.imageUrl} alt="" draggable={false} style={{ transform: `translate(${edit.x * 100}%, ${edit.y * 100}%) rotate(${edit.rotation}deg) scale(${edit.zoom})` }}/>{safeZone && <span className="safe-ring" style={{ inset: `${500 / edit.sizeMm}%` }} aria-hidden="true"/>}</div> : <div className="waiting-preview">{current?.status === 'failed' || current?.status === 'interrupted' ? <><CircleHelp size={37}/><strong>그림을 완성하지 못했어요</strong><p>{current.error || '다시 시도해 주세요.'}</p><button className="outline-btn" onClick={() => { setPhase('style'); setRequestId(null); }}>다시 만들기</button></> : <><span className="waiting-disc"><Sparkles size={45}/></span><strong>{currentStatus || '그림을 불러오는 중이에요'}</strong><p>조금만 기다려 주세요. 완성되면 여기서 만날 수 있어요.</p><LoaderCircle className="spin" size={21}/></>}</div>}
             </div>
             <div className="preview-hint"><span><ShieldCheck size={16}/> 점선 안쪽에 중요한 얼굴과 글씨를 두세요.</span><label className="switch-row"><input type="checkbox" checked={safeZone} onChange={e => setSafeZone(e.target.checked)}/> 안전선 보기</label></div>
             <p className="scale-note">화면의 크기는 실제 인쇄 크기와 다릅니다. 출력 전 시험 인쇄로 확인해 주세요.</p>
@@ -375,7 +378,7 @@ function App() {
         </div>
       </section>}
 
-      {jobs.length > 0 && <section className="history page-wrap" aria-label="이전 작품"><div className="history-heading"><div><span className="eyebrow">우리의 작은 전시</span><h2>오늘 만든 작품</h2></div><span>{jobs.length}개의 순간</span></div><div className="history-list">{jobs.map(job => <button key={job.id} className={`history-item ${selectedId === job.id ? 'selected' : ''}`} onClick={() => void openJob(job)}><span className="history-thumb"><img src={job.imageUrl || job.photoUrl} alt=""/></span><span className="history-info"><strong>{styleChoices.find(choice => choice.id === job.style)?.title}</strong><small>{job.status === 'succeeded' ? new Date(job.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : job.status === 'failed' ? '제작 실패' : job.status === 'interrupted' ? '제작 중단' : job.stage || '제작 중'}</small></span><ChevronRight size={17}/></button>)}</div></section>}
+      {jobs.length > 0 && <section className="history page-wrap" aria-label="이전 작품"><div className="history-heading"><div><span className="eyebrow">우리의 작은 전시</span><h2>오늘 만든 작품</h2></div><span>{jobs.length}개의 순간</span></div><div className="history-list">{jobs.map(job => <button key={job.id} className={`history-item ${selectedId === job.id ? 'selected' : ''}`} onClick={() => void openJob(job)}><span className="history-thumb"><ProtectedImage src={job.imageUrl || job.photoUrl} alt=""/></span><span className="history-info"><strong>{styleChoices.find(choice => choice.id === job.style)?.title}</strong><small>{job.status === 'succeeded' ? new Date(job.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : job.status === 'failed' ? '제작 실패' : job.status === 'interrupted' ? '제작 중단' : job.stage || '제작 중'}</small></span><ChevronRight size={17}/></button>)}</div></section>}
     </main>
 
     <footer className="site-footer"><span>동그란 순간 <span className="footer-dot">◌</span> AI 티코스터 공방</span><span>한 장의 사진, 오래 남을 마음</span></footer>

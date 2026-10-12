@@ -54,7 +54,7 @@ export function createEventManager({backend,onStop,backendToken}) {
         const match=output.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
         if(match&&!published){published=true;clearTimeout(startingTimer);access.assert(e.id);gateway.setOrigin(match[0]);
           // Fragment is never transmitted in a URL request or external referrer.
-          const joinUrl=match[0]+'/#join='+encodeURIComponent(e.code);
+          const joinUrl='https://ny-colab.github.io/ai-coaster-studio/#host='+encodeURIComponent(match[0])+'&join='+encodeURIComponent(e.code);
           const qr=await QRCode.toDataURL(joinUrl,{width:480,margin:4,errorCorrectionLevel:'M'});access.assert(e.id);
           view={status:'open',message:'모바일 체험이 열려 있습니다.',url:match[0],joinUrl,code:e.code,qr};
         }

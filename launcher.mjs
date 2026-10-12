@@ -28,7 +28,7 @@ async function ping(url) {
     const response = await fetch(new URL('/api/ping', url), { signal: AbortSignal.timeout(1500) });
     if (!response.ok) return false;
     const info = await response.json();
-    return info?.app === 'coaster-studio' && info?.version === '1.2.0';
+    return info?.app === 'coaster-studio' && info?.version === '1.3.0';
   } catch { return false; }
 }
 function isLive(pid) {

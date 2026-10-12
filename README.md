@@ -3,7 +3,15 @@
 사진을 수채화·크레파스·캐리커처 티코스터로 만드는 Windows 운영자용 웹앱입니다.
 운영자 PC의 **Codex CLI + ChatGPT 로그인**으로 자동 생성합니다. API 키는 필요하지 않습니다.
 
-## 바로 시작
+## 웹에서 바로 열기
+
+**https://ny-colab.github.io/ai-coaster-studio/**
+
+참가자는 설치 없이 GitHub 웹앱에서 사진·화풍 선택, 자동 생성, 편집, PNG/PDF 저장까지 진행합니다. 운영자 PC의 앱(v1.3.0 이상)에서 **모바일 체험 · QR**을 열면 이 웹앱에 자동 연결되는 행사 링크와 QR이 생성됩니다. 기본 주소로 들어온 경우 행사 링크를 붙여넣으세요.
+
+운영자 PC 한 대는 연결 프로그램을 실행하고 Codex에 로그인한 상태로 켜 두어야 합니다. GitHub에 인증정보나 참가자 사진을 저장하지 않습니다. 체험 종료·시간 만료 시 웹의 생성 요청도 차단됩니다.
+
+## 운영자 PC 준비
 
 1. [최신 Windows 실행용 ZIP](https://github.com/NY-colab/ai-coaster-studio/releases/latest/download/AI-Coaster-Studio-Windows-x64.zip)을 운영자 PC에서 내려받아 전체 압축을 풉니다.
 2. **START.vbs**를 더블클릭합니다. 첫 화면에서 해당 PC의 **Codex로 로그인하기**를 완료하고 **공방 시작하기**를 누릅니다. 이미 로그인되어 있으면 바로 시작할 수 있습니다.
