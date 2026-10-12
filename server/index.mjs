@@ -8,6 +8,7 @@ import os from 'node:os';
 import {createEventManager} from './events.mjs';
 import {latestRelease} from './updates.mjs';
 import {installOperatorBridge} from './operator-bridge.mjs';
+import {threadImage} from './image-output.mjs';
 import sharp from 'sharp';
 import { ROOT,DATA,VERSION,CODEX_HOME_DIR,DEFAULT_EDIT,STYLES,alive,inside,appError,validId,readJSON,writeJSON,validateEdit } from './common.mjs';
 import { diagnose,startWorker,startLogin,loginState } from './codex.mjs';
@@ -28,7 +29,7 @@ const save=async job=>{job.updatedAt=new Date().toISOString(); jobs.set(job.id,j
 const publicJob=job=>{const {runnerPid,remote,...safe}=job;return safe;};
 const busy=()=>[...jobs.values()].some(j=>['queued','running'].includes(j.status)||(j.errorCode==='EVENT_CLOSED'&&j.runnerPid&&alive(j.runnerPid)));
 async function refreshJob(job) {
-  if(!['queued','running'].includes(job.status))return;
+  if(!['queued','running'].includes(job.status)&&job.errorCode!=='GENERATION_FAILED')return;
   const dir=folder(job.id), receipt=await readJSON(path.join(dir,'receipt.json'));
   const events=await fs.readFile(path.join(dir,'events.jsonl'),'utf8').catch(()=> '');
   for(const line of events.split(/\r?\n/))try {const event=JSON.parse(line);if(event.type==='thread.started')job.providerThread=event.thread_id;}catch{}
@@ -41,7 +42,9 @@ async function refreshJob(job) {
   }
   try {
     const result=await readJSON(path.join(dir,'provider.json'));
-    if(receipt.exitCode!==0||result?.status!=='success'||!result?.image_path) {
+    const recovered = receipt.exitCode===0 && !receipt.cancelled && !result?.image_path ? await threadImage(CODEX_HOME_DIR,job.providerThread,job.createdAt) : null;
+    const imagePath = result?.status==='success' ? result.image_path || recovered : recovered;
+    if(receipt.exitCode!==0||receipt.cancelled||!imagePath) {
       const log=(await fs.readFile(path.join(dir,'provider-stderr.log'),'utf8').catch(()=>''))+' '+events+' '+(result?.error||'');
       if(result?.status==='unavailable'||/unavailable|unsupported tool/i.test(log)){generation='unavailable';throw appError('현재 Codex 계정에서 내장 이미지 생성 도구를 사용할 수 없습니다. Codex 업데이트와 계정 도구 사용 가능 여부를 확인해 주세요.','IMAGE_TOOL_UNAVAILABLE');}
       if(/rate.limit|usage.limit|quota|limit reached/i.test(log))throw appError('Codex 사용 한도에 도달했습니다. 한도가 회복된 후 다시 시도해 주세요.','RATE_LIMIT');
@@ -49,7 +52,7 @@ async function refreshJob(job) {
       if(/network|connect|timeout|timed.out/i.test(log))throw appError('네트워크 연결로 인해 완료를 확인하지 못했습니다. 자동 재제출하지 않았습니다.','CONNECTION_FAILED');
       throw appError('이미지 생성이 완료되지 않았습니다. 이전 결과는 보존되어 있습니다.','GENERATION_FAILED');
     }
-    const candidate=await fs.realpath(path.normalize(result.image_path));
+    const candidate=await fs.realpath(path.normalize(imagePath));
     const cache=await fs.realpath(path.join(CODEX_HOME_DIR,'generated_images'));
     const own=await fs.realpath(dir);
     if(!inside(cache,candidate)&&!inside(own,candidate))throw appError('생성 파일 경로를 검증하지 못했습니다.','OUTPUT_INVALID');
@@ -58,13 +61,14 @@ async function refreshJob(job) {
     const meta=await sharp(candidate,{limitInputPixels:36000000}).metadata();if(!['png','jpeg','webp'].includes(meta.format)||meta.width<256||meta.height<256)throw appError('유효한 생성 이미지가 아닙니다.','OUTPUT_INVALID');
     await sharp(candidate).rotate().resize(1536,1536,{fit:'contain',background:'#fffaf0'}).png().toFile(path.join(dir,'result.png'));
     if(job.errorCode==='EVENT_CLOSED')return;
-    job.status='succeeded';job.stage='그림 완성';job.imageUrl='/api/jobs/'+job.id+'/image';generation='verified';await save(job);
+    delete job.error;delete job.errorCode;job.outputRecovery=recovered?'execution-thread':undefined;job.status='succeeded';job.stage='그림 완성';job.imageUrl='/api/jobs/'+job.id+'/image';generation='verified';await save(job);
   } catch(e) {if(job.errorCode==='EVENT_CLOSED')return;job.status='failed';job.stage='생성 완료를 확인하지 못했습니다';job.error=e.message;job.errorCode=e.code||'OUTPUT_INVALID';await save(job);}
 }
 let refreshing=false;
-async function refreshAll(){if(refreshing)return;refreshing=true;try{for(const job of jobs.values())await refreshJob(job);activeJob=[...jobs.values()].find(j=>['queued','running'].includes(j.status))?.id||null;}finally{refreshing=false;}}
+async function refreshAll(){if(refreshing)return;refreshing=true;try{for(const job of jobs.values())if(['queued','running'].includes(job.status))await refreshJob(job);activeJob=[...jobs.values()].find(j=>['queued','running'].includes(j.status))?.id||null;}finally{refreshing=false;}}
 // Remote work never resumes admission after a server restart.
 for(const job of jobs.values())if(job.remote&&['queued','running'].includes(job.status)){await fs.writeFile(path.join(folder(job.id),'cancel.flag'),'Server restarted');job.status='failed';job.errorCode='EVENT_CLOSED';job.error='서버가 재시작되어 이전 모바일 체험이 종료되었습니다.';await save(job);}
+for(const job of jobs.values())if(job.errorCode==='GENERATION_FAILED')await refreshJob(job);
 await refreshAll();
 const timer=setInterval(()=>refreshAll().catch(()=>{}),1500);timer.unref();
 installOperatorBridge(app,{token,backend:()=>url});

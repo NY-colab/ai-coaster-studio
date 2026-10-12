@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $installBase = [IO.Path]::GetFullPath($InstallRoot)
-$manifestUrl = 'https://github.com/NY-colab/ai-coaster-studio/releases/download/v1.4.1/LITE-MANIFEST.json'
+$manifestUrl = 'https://github.com/NY-colab/ai-coaster-studio/releases/download/v1.4.2/LITE-MANIFEST.json'
 function Find-Codex {
     $candidates = @()
     $command = Get-Command codex.exe -ErrorAction SilentlyContinue
@@ -42,7 +42,7 @@ try {
     New-Item -ItemType Directory -Force -Path $installBase | Out-Null
     $codexPath = if ($PreferBundled) { $null } else { Find-Codex }
     $mode = if ($codexPath) { 'slim' } else { 'full' }
-    $destination = Safe-Child $installBase ('v1.4.1-' + $mode)
+    $destination = Safe-Child $installBase ('v1.4.2-' + $mode)
     $app = Join-Path $destination 'AI-Coaster-Studio'
     $marker = Join-Path $destination 'installed.json'
     if (-not (Test-Path -LiteralPath $marker)) {
@@ -50,9 +50,9 @@ try {
         if ($codexPath) { Write-Host 'Existing Codex detected. The large Codex bundle will NOT be downloaded.' }
         else { Write-Host 'Compatible Codex was not found. The full runtime is required for this PC.' }
         $manifest = Invoke-RestMethod $manifestUrl -TimeoutSec 30
-        if ($manifest.version -ne '1.4.1') { throw 'Unexpected release version.' }
+        if ($manifest.version -ne '1.4.2') { throw 'Unexpected release version.' }
         $asset = $manifest.$mode
-        if ($asset.url -notmatch '^https://github\.com/NY-colab/ai-coaster-studio/releases/download/v1\.4\.1/[A-Za-z0-9._-]+\.zip$' -or $asset.sha256 -notmatch '^[a-f0-9]{64}$' -or $asset.bytes -le 0 -or $asset.bytes -gt 500000000) { throw 'Invalid release manifest.' }
+        if ($asset.url -notmatch '^https://github\.com/NY-colab/ai-coaster-studio/releases/download/v1\.4\.2/[A-Za-z0-9._-]+\.zip$' -or $asset.sha256 -notmatch '^[a-f0-9]{64}$' -or $asset.bytes -le 0 -or $asset.bytes -gt 500000000) { throw 'Invalid release manifest.' }
         if (Test-Path -LiteralPath $destination) { throw 'An incomplete installation exists. Keep it and use a fresh folder for START-LITE.' }
         $stageName = 'setup-' + [guid]::NewGuid().ToString('N')
         $stage = Safe-Child $installBase $stageName
@@ -81,7 +81,7 @@ try {
     }
     $node = Join-Path $app 'runtime/node.exe'
     $installed = Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json
-    if ($installed.version -ne '1.4.1' -or $installed.mode -ne $mode) { throw 'Invalid installation record.' }
+    if ($installed.version -ne '1.4.2' -or $installed.mode -ne $mode) { throw 'Invalid installation record.' }
     if (-not (Test-Path -LiteralPath $node) -or -not (Test-Path -LiteralPath (Join-Path $app 'launcher.mjs'))) { throw 'Installation files are incomplete. Unzip the starter into a new folder.' }
     if ($mode -eq 'slim') { $env:COASTER_CODEX_PATH = $codexPath }
     else { $env:COASTER_CODEX_PATH = Join-Path $app 'runtime/codex/codex.exe' }
