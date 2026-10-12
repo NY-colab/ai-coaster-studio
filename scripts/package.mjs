@@ -114,7 +114,7 @@ mkdirSync(path.join(app, 'data'), { recursive: true });
 writeFileSync(path.join(app, 'data', '.keep'), 'User data is created here at runtime.\n');
 
 const sourceFiles = [
-  'UPDATE.cmd','UPDATE.ps1','README.md','CHANGELOG.md','LICENSE','.github','src', 'server', 'scripts', 'tests', 'index.html', 'package.json', 'package-lock.json',
+  'UPDATE.cmd','UPDATE.ps1','README.md','CHANGELOG.md','LICENSE','.github','src', 'server', 'scripts', 'installer', 'tests', 'index.html', 'package.json', 'package-lock.json',
   'tsconfig.json', 'vite.config.ts', 'launcher.mjs', 'START.cmd', 'START.vbs',
   'README.ko.md', 'THIRD-PARTY-NOTICES.md', '.gitignore',
   'share-launcher.mjs', 'share-server.mjs', 'START_SHARE.vbs', 'START_SHARE.cmd', 'STOP_SHARE.vbs', 'REMOTE.ko.md',
