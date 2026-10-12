@@ -16,7 +16,14 @@ export default function WebApp() {
     catch (e) { setError((e as Error).message); }
     finally { starting.current = false; setPending(false); }
   }
-  useEffect(() => { if (invite) void join(invite); }, []);
+  useEffect(() => {
+    const openInvite = () => {
+      if (!new URLSearchParams(location.hash.slice(1)).has('host')) return;
+      setConnected(false); setLink(location.href); void join(location.href);
+    };
+    openInvite(); window.addEventListener('hashchange', openInvite);
+    return () => window.removeEventListener('hashchange', openInvite);
+  }, []);
   useEffect(() => { const reset = () => { setConnected(false); setError('연결이 만료되었습니다. 새 행사 링크로 입장해 주세요.'); }; window.addEventListener('coaster-web-disconnect', reset); return () => window.removeEventListener('coaster-web-disconnect', reset); }, []);
   if (connected) return <><div className="web-connection-bar"><span><ShieldCheck size={15}/> 운영자 PC에 연결된 웹 공방</span><button onClick={() => { disconnect(); setConnected(false); }}><Unplug size={14}/> 이 기기 연결 닫기</button></div><App/></>;
   return <div className="operator-page"><header className="operator-header"><div className="brand"><span className="brand-symbol">◌</span><span><strong>동그란 순간</strong><small>AI 티코스터 공방</small></span></div><span className="operator-label">다운로드 없이 웹에서</span></header>
